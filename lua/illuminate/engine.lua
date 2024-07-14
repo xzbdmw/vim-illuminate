@@ -1,11 +1,11 @@
-local hl = require('illuminate.highlight')
-local ref = require('illuminate.reference')
-local config = require('illuminate.config')
-local util = require('illuminate.util')
+local hl = require("illuminate.highlight")
+local ref = require("illuminate.reference")
+local config = require("illuminate.config")
+local util = require("illuminate.util")
 
 local M = {}
 
-local AUGROUP = 'vim_illuminate_v2_augroup'
+local AUGROUP = "vim_illuminate_v2_augroup"
 local timers = {}
 local paused_bufs = {}
 local stopped_bufs = {}
@@ -22,15 +22,12 @@ local function buf_should_illuminate(bufnr)
     end
 
     return config.should_enable()(bufnr)
-        and (config.max_file_lines() == nil or vim.fn.line('$') <= config.max_file_lines())
+        and (config.max_file_lines() == nil or vim.fn.line("$") <= config.max_file_lines())
+        and util.is_allowed(config.modes_allowlist(bufnr), config.modes_denylist(bufnr), vim.api.nvim_get_mode().mode)
         and util.is_allowed(
-            config.modes_allowlist(bufnr),
-            config.modes_denylist(bufnr),
-            vim.api.nvim_get_mode().mode
-        ) and util.is_allowed(
             config.filetypes_allowlist(),
             config.filetypes_denylist(),
-            vim.api.nvim_buf_get_option(bufnr, 'filetype')
+            vim.api.nvim_buf_get_option(bufnr, "filetype")
         )
 end
 
@@ -41,26 +38,130 @@ local function stop_timer(timer)
     end
 end
 
+M.clear_keeped_highlight = function()
+    hl.buf_clear_keeped_references(vim.api.nvim_get_current_buf())
+end
+
+M.keep_highlight = function(bufnr, winid)
+    bufnr = bufnr or vim.api.nvim_get_current_buf()
+    winid = winid or vim.api.nvim_get_current_win()
+
+    local provider = M.get_provider(bufnr)
+    if not provider then
+        return
+    end
+    pcall(provider["initiate_request"], bufnr, winid)
+
+    local changedtick = vim.api.nvim_buf_get_changedtick(bufnr)
+
+    local timer = vim.loop.new_timer()
+    timers[bufnr] = timer
+    timer:start(
+        1,
+        17,
+        vim.schedule_wrap(function()
+            local ok, err = pcall(function()
+                provider = M.get_provider(bufnr)
+                if not provider then
+                    stop_timer(timer)
+                    return
+                end
+
+                local references = provider.get_references(bufnr, util.get_cursor_pos(winid))
+                if references ~= nil then
+                    ref.buf_set_keeped_references(bufnr, references)
+                    hl.buf_highlight_keeped_references(bufnr, ref.buf_get_keeped_references(bufnr))
+                    local sorted_ref = ref.buf_get_keeped_references(bufnr)
+                    local cursor = vim.api.nvim_win_get_cursor(0)
+                    for index, reference in ipairs(sorted_ref) do
+                        if
+                            cursor[1] - 1 == reference[1][1]
+                            and cursor[2] <= reference[2][2]
+                            and cursor[2] >= reference[1][2]
+                        then
+                            require("illuminate.goto").Hl(index)
+                            break
+                        end
+                    end
+                    stop_timer(timer)
+                end
+            end)
+
+            if not ok then
+                local time = vim.loop.hrtime()
+                if #error_timestamps == 5 then
+                    vim.notify(
+                        "vim-illuminate: An internal error has occured: " .. vim.inspect(ok) .. vim.inspect(err),
+                        vim.log.levels.ERROR,
+                        {}
+                    )
+                    M.stop()
+                    stop_timer(timer)
+                elseif #error_timestamps == 0 or time - error_timestamps[#error_timestamps] < 500000000 then
+                    table.insert(error_timestamps, time)
+                else
+                    error_timestamps = { time }
+                end
+            end
+        end)
+    )
+end
 function M.start()
     started = true
     vim.api.nvim_create_augroup(AUGROUP, { clear = true })
-    vim.api.nvim_create_autocmd({ 'VimEnter', 'CursorMoved', 'CursorMovedI', 'ModeChanged', 'TextChanged' }, {
+    vim.api.nvim_create_autocmd({ "VimEnter", "CursorMoved", "TextChanged" }, {
         group = AUGROUP,
         callback = function()
-            M.refresh_references()
+            if vim.g.gd then
+                vim.defer_fn(function()
+                    M.refresh_references()
+                end, 100)
+            else
+                vim.schedule(function()
+                    M.refresh_references()
+                end)
+            end
         end,
     })
+
+    vim.api.nvim_create_autocmd({ "BufEnter" }, {
+        group = AUGROUP,
+        callback = function()
+            if vim.g.gd then
+                vim.defer_fn(function()
+                    M.refresh_references()
+                end, 100)
+            end
+        end,
+    })
+
+    vim.api.nvim_create_autocmd({ "ModeChanged" }, {
+        -- pattern = "n:i",
+        group = AUGROUP,
+        callback = function()
+            vim.defer_fn(function()
+                M.refresh_references()
+            end, 10)
+        end,
+    })
+    -- vim.api.nvim_create_autocmd({ "ModeChanged" }, {
+    --     pattern = "*:n",
+    --     group = AUGROUP,
+    --     callback = function()
+    --         M.refresh_references()
+    --     end,
+    -- })
     -- If vim.lsp.buf.format is called, this will call vim.api.nvim_buf_set_text which messes up extmarks.
     -- By using this `written` variable, we can ensure refresh_references doesn't terminate early based on
     -- ref.buf_cursor_in_references being incorrect (we have references but they're not actually showing
     -- as illuminated). vim.lsp.buf.format will trigger CursorMoved so we don't need to do it here.
-    vim.api.nvim_create_autocmd({ 'BufWritePost' }, {
+    vim.api.nvim_create_autocmd({ "BufWritePost" }, {
         group = AUGROUP,
         callback = function()
             written[vim.api.nvim_get_current_buf()] = true
         end,
     })
-    vim.api.nvim_create_autocmd({ 'VimLeave' }, {
+    vim.api.nvim_create_autocmd({ "VimLeave" }, {
         group = AUGROUP,
         callback = function()
             for _, timer in pairs(timers) do
@@ -74,7 +175,6 @@ function M.stop()
     started = false
     vim.api.nvim_create_augroup(AUGROUP, { clear = true })
 end
-
 --- Get the highlighted references for the item under the cursor for
 --- @bufnr and clears any old reference highlights
 ---
@@ -99,82 +199,90 @@ function M.refresh_references(bufnr, winid)
     if written[bufnr] or not ref.buf_cursor_in_references(bufnr, util.get_cursor_pos(winid)) then
         hl.buf_clear_references(bufnr)
         ref.buf_set_references(bufnr, {})
-    elseif config.large_file_cutoff() ~= nil and vim.fn.line('$') > config.large_file_cutoff() then
+    elseif config.large_file_cutoff() ~= nil and vim.fn.line("$") > config.large_file_cutoff() then
         return
     end
+
     written[bufnr] = nil
 
     if timers[bufnr] then
         stop_timer(timers[bufnr])
     end
-
     local provider = M.get_provider(bufnr)
-    if not provider then return end
-    pcall(provider['initiate_request'], bufnr, winid)
+    if not provider then
+        return
+    end
+    pcall(provider["initiate_request"], bufnr, winid)
 
     local changedtick = vim.api.nvim_buf_get_changedtick(bufnr)
 
     local timer = vim.loop.new_timer()
     timers[bufnr] = timer
-    timer:start(config.delay(bufnr), 17, vim.schedule_wrap(function()
-        local ok, err = pcall(function()
-            if not bufnr or not vim.api.nvim_buf_is_loaded(bufnr) then
-                stop_timer(timer)
-                return
-            end
-
-            hl.buf_clear_references(bufnr)
-            ref.buf_set_references(bufnr, {})
-
-            if vim.api.nvim_buf_get_changedtick(bufnr) ~= changedtick
-                or vim.api.nvim_get_current_win() ~= winid
-                or bufnr ~= vim.api.nvim_win_get_buf(0) then
-                stop_timer(timer)
-                return
-            end
-
-            provider = M.get_provider(bufnr)
-            if not provider then
-                stop_timer(timer)
-                return
-            end
-
-            local references = provider.get_references(bufnr, util.get_cursor_pos(winid))
-            if references ~= nil then
-                ref.buf_set_references(bufnr, references)
-                if ref.buf_cursor_in_references(bufnr, util.get_cursor_pos(winid)) then
-                    if not invisible_bufs[bufnr] == true then
-                        hl.buf_highlight_references(bufnr, ref.buf_get_references(bufnr))
-                    end
-                else
-                    ref.buf_set_references(bufnr, {})
+    timer:start(
+        config.delay(bufnr),
+        17,
+        vim.schedule_wrap(function()
+            local ok, err = pcall(function()
+                if not bufnr or not vim.api.nvim_buf_is_loaded(bufnr) then
+                    stop_timer(timer)
+                    return
                 end
-                stop_timer(timer)
+
+                hl.buf_clear_references(bufnr)
+                ref.buf_set_references(bufnr, {})
+
+                if
+                    vim.api.nvim_buf_get_changedtick(bufnr) ~= changedtick
+                    or vim.api.nvim_get_current_win() ~= winid
+                    or bufnr ~= vim.api.nvim_win_get_buf(0)
+                then
+                    stop_timer(timer)
+                    return
+                end
+
+                provider = M.get_provider(bufnr)
+                if not provider then
+                    stop_timer(timer)
+                    return
+                end
+
+                local references = provider.get_references(bufnr, util.get_cursor_pos(winid))
+                if references ~= nil then
+                    ref.buf_set_references(bufnr, references)
+                    if ref.buf_cursor_in_references(bufnr, util.get_cursor_pos(winid)) then
+                        if not invisible_bufs[bufnr] == true then
+                            hl.buf_highlight_references(bufnr, ref.buf_get_references(bufnr))
+                        end
+                    else
+                        ref.buf_set_references(bufnr, {})
+                    end
+                    stop_timer(timer)
+                end
+            end)
+
+            if not ok then
+                local time = vim.loop.hrtime()
+                if #error_timestamps == 5 then
+                    vim.notify(
+                        "vim-illuminate: An internal error has occured: " .. vim.inspect(ok) .. vim.inspect(err),
+                        vim.log.levels.ERROR,
+                        {}
+                    )
+                    M.stop()
+                    stop_timer(timer)
+                elseif #error_timestamps == 0 or time - error_timestamps[#error_timestamps] < 500000000 then
+                    table.insert(error_timestamps, time)
+                else
+                    error_timestamps = { time }
+                end
             end
         end)
-
-        if not ok then
-            local time = vim.loop.hrtime()
-            if #error_timestamps == 5 then
-                vim.notify(
-                    'vim-illuminate: An internal error has occured: ' .. vim.inspect(ok) .. vim.inspect(err),
-                    vim.log.levels.ERROR,
-                    {}
-                )
-                M.stop()
-                stop_timer(timer)
-            elseif #error_timestamps == 0 or time - error_timestamps[#error_timestamps] < 500000000 then
-                table.insert(error_timestamps, time)
-            else
-                error_timestamps = { time }
-            end
-        end
-    end))
+    )
 end
 
 function M.get_provider(bufnr)
     for _, provider in ipairs(config.providers(bufnr) or {}) do
-        local ok, providerModule = pcall(require, string.format('illuminate.providers.%s', provider))
+        local ok, providerModule = pcall(require, string.format("illuminate.providers.%s", provider))
         if ok and providerModule.is_ready(bufnr) then
             return providerModule, provider
         end
@@ -253,11 +361,11 @@ end
 
 function M.debug()
     local bufnr = vim.api.nvim_get_current_buf()
-    print('buf_should_illuminate', bufnr, buf_should_illuminate(bufnr))
-    print('config', vim.inspect(config.get_raw()))
-    print('started', started)
-    print('provider', M.get_provider(bufnr))
-    print('`termguicolors`', vim.opt.termguicolors:get())
+    print("buf_should_illuminate", bufnr, buf_should_illuminate(bufnr))
+    print("config", vim.inspect(config.get_raw()))
+    print("started", started)
+    print("provider", M.get_provider(bufnr))
+    print("`termguicolors`", vim.opt.termguicolors:get())
 end
 
 function M.is_paused()

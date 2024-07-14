@@ -1,7 +1,7 @@
 local M = {}
 
-function M.get_cursor_pos(winid)
-    winid = winid or vim.api.nvim_get_current_win()
+function M.get_cursor_pos()
+    local winid = vim.api.nvim_get_current_win()
     local cursor = vim.api.nvim_win_get_cursor(winid)
     cursor[1] = cursor[1] - 1 -- we always want line to be 0-indexed
     return cursor
@@ -34,7 +34,7 @@ end
 function M.tbl_get(tbl, expected_type, ...)
     local cur = tbl
     for _, key in ipairs({ ... }) do
-        if type(cur) ~= 'table' or cur[key] == nil then
+        if type(cur) ~= "table" or cur[key] == nil then
             return nil
         end
 
@@ -45,7 +45,7 @@ function M.tbl_get(tbl, expected_type, ...)
 end
 
 function M.has_keymap(mode, lhs)
-    return vim.fn.mapcheck(lhs, mode) ~= ''
+    return vim.fn.mapcheck(lhs, mode) ~= ""
 end
 
 return M

@@ -1,21 +1,23 @@
 local M = {}
 
+local hl = require("illuminate.highlight")
+local ref = require("illuminate.reference")
 local bufs = {}
 
 local function _str_byteindex_enc(line, col, encoding)
     if not encoding then
-        encoding = 'utf-16'
+        encoding = "utf-16"
     end
 
-    if encoding == 'utf-8' then
+    if encoding == "utf-8" then
         if col then
             return col
         else
             return #line
         end
-    elseif encoding == 'utf-16' then
+    elseif encoding == "utf-16" then
         return vim.str_byteindex(line, col, true)
-    elseif encoding == 'utf-32' then
+    elseif encoding == "utf-32" then
         return vim.str_byteindex(line, col)
     else
         return col
@@ -35,7 +37,7 @@ local function get_line_byte_from_position(bufnr, line, col, offset_encoding)
     if ok then
         return result
     end
-    return math.min(#(lines[1]), col)
+    return math.min(#lines[1], col)
 end
 
 function M.get_references(bufnr)
@@ -48,18 +50,17 @@ end
 
 function M.is_ready(bufnr)
     local supported = false
-    if vim.lsp.for_each_buffer_client then
-        supported = false
-        vim.lsp.for_each_buffer_client(bufnr, function(client)
-            if client and client.supports_method('textDocument/documentHighlight') then
-                supported = true
-            end
-        end)
+    local clients = vim.lsp.get_clients({ bufnr = bufnr })
+    for _, client in ipairs(clients) do
+        if client and client.supports_method("textDocument/documentHighlight") then
+            supported = true
+        end
     end
     return supported
 end
 
 function M.initiate_request(bufnr, winid)
+    -- local bufnr = vim.api.nvim_get_current_buf()
     local id = 1
     if bufs[bufnr] then
         local prev_id, cancel_fn, references = unpack(bufs[bufnr])
@@ -71,7 +72,7 @@ function M.initiate_request(bufnr, winid)
 
     local cancel_fn = vim.lsp.buf_request_all(
         bufnr,
-        'textDocument/documentHighlight',
+        "textDocument/documentHighlight",
         vim.lsp.util.make_position_params(winid),
         function(client_results)
             if bufs[bufnr][1] ~= id then
@@ -85,24 +86,24 @@ function M.initiate_request(bufnr, winid)
             local references = {}
             for client_id, results in pairs(client_results) do
                 local client = vim.lsp.get_client_by_id(client_id)
-                if client and results['result'] then
-                    for _, res in ipairs(results['result']) do
+                if client and results["result"] then
+                    for _, res in ipairs(results["result"]) do
                         local start_col = get_line_byte_from_position(
                             bufnr,
-                            res['range']['start']['line'],
-                            res['range']['start']['character'],
-                            res['offset_encoding']
+                            res["range"]["start"]["line"],
+                            res["range"]["start"]["character"],
+                            res["offset_encoding"]
                         )
                         local end_col = get_line_byte_from_position(
                             bufnr,
-                            res['range']['end']['line'],
-                            res['range']['end']['character'],
-                            res['offset_encoding']
+                            res["range"]["end"]["line"],
+                            res["range"]["end"]["character"],
+                            res["offset_encoding"]
                         )
                         table.insert(references, {
-                            { res['range']['start']['line'], start_col },
-                            { res['range']['end']['line'],   end_col },
-                            res['kind'],
+                            { res["range"]["start"]["line"], start_col },
+                            { res["range"]["end"]["line"], end_col },
+                            res["kind"],
                         })
                     end
                 end
@@ -116,6 +117,55 @@ function M.initiate_request(bufnr, winid)
         id,
         cancel_fn,
     }
+end
+
+function Get_highlights(bufnr, winid)
+    local references = {}
+    vim.lsp.buf_request_all(
+        bufnr,
+        "textDocument/documentHighlight",
+        vim.lsp.util.make_position_params(winid),
+        function(client_results)
+            for _, results in pairs(client_results) do
+                if results["result"] then
+                    for _, res in ipairs(results["result"]) do
+                        local start_col = get_line_byte_from_position(
+                            bufnr,
+                            res["range"]["start"]["line"],
+                            res["range"]["start"]["character"],
+                            res["offset_encoding"]
+                        )
+                        local end_col = get_line_byte_from_position(
+                            bufnr,
+                            res["range"]["end"]["line"],
+                            res["range"]["end"]["character"],
+                            res["offset_encoding"]
+                        )
+                        table.insert(references, {
+                            { res["range"]["start"]["line"], start_col },
+                            { res["range"]["end"]["line"], end_col },
+                            res["kind"],
+                        })
+                    end
+                end
+            end
+
+            if references ~= nil then
+                ref.buf_set_keeped_references(bufnr, references)
+                hl.buf_highlight_keeped_references(bufnr, ref.buf_get_keeped_references(bufnr))
+            end
+        end
+    )
+
+    local function checkGlobalVarAndSetWinBar()
+        if references ~= nil then
+            return
+        else
+            vim.defer_fn(checkGlobalVarAndSetWinBar, 1)
+        end
+    end
+
+    checkGlobalVarAndSetWinBar()
 end
 
 return M

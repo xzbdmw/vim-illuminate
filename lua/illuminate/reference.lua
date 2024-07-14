@@ -9,15 +9,26 @@ local M = {}
 -- @field 2 (table) end pos
 
 local buf_references = {}
+local keeped_buf_references = {}
 
 local function get_references(bufnr)
     return buf_references[bufnr] or {}
 end
 
+local function get_keeped_references(bufnr)
+    return keeped_buf_references[bufnr] or {}
+end
+
 local function pos_before(pos1, pos2)
-    if pos1[1] < pos2[1] then return true end
-    if pos1[1] > pos2[1] then return false end
-    if pos1[2] < pos2[2] then return true end
+    if pos1[1] < pos2[1] then
+        return true
+    end
+    if pos1[1] > pos2[1] then
+        return false
+    end
+    if pos1[2] < pos2[2] then
+        return true
+    end
     return false
 end
 
@@ -45,6 +56,22 @@ local function buf_sort_references(bufnr)
     end
 end
 
+local function buf_sort_keeped_references(bufnr)
+    local should_sort = false
+    for i, ref in ipairs(get_keeped_references(bufnr)) do
+        if i > 1 then
+            if not ref_before(get_keeped_references(bufnr)[i - 1], ref) then
+                should_sort = true
+                break
+            end
+        end
+    end
+
+    if should_sort then
+        table.sort(get_keeped_references(bufnr), ref_before)
+    end
+end
+
 function M.is_pos_in_ref(pos, ref)
     return (pos_before(ref[1], pos) or pos_equal(ref[1], pos)) and (pos_before(pos, ref[2]) or pos_equal(pos, ref[2]))
 end
@@ -66,9 +93,18 @@ function M.buf_get_references(bufnr)
     return get_references(bufnr)
 end
 
+function M.buf_get_keeped_references(bufnr)
+    return get_keeped_references(bufnr)
+end
+
 function M.buf_set_references(bufnr, references)
     buf_references[bufnr] = references
     buf_sort_references(bufnr)
+end
+
+function M.buf_set_keeped_references(bufnr, references)
+    keeped_buf_references[bufnr] = references
+    buf_sort_keeped_references(bufnr)
 end
 
 function M.buf_cursor_in_references(bufnr, cursor_pos)
