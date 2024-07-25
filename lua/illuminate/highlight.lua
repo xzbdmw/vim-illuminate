@@ -54,6 +54,9 @@ local update = function()
         if not context or #context == 0 then
             return
         end
+        if vim.w[winid].gitsigns_preview then
+            return
+        end
         require("treesitter-context.render").open(bufnr, winid, context, context_lines, true)
     end
 end
