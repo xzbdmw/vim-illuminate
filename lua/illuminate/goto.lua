@@ -10,7 +10,7 @@ function M.Hl(current)
 	vim.api.nvim_buf_clear_namespace(0, ns, 0, -1)
 	local sc = #ref.buf_get_keeped_references(bufnr)
 	vim.api.nvim_buf_set_extmark(0, ns, vim.api.nvim_win_get_cursor(0)[1] - 1, 0, {
-		virt_text = { { "[" .. current .. "/" .. sc .. "]", "illuminatedH" } },
+		virt_text = { { "[" .. current .. " of " .. sc .. "]", "illuminatedH" } },
 		virt_text_pos = "eol",
 	})
 
