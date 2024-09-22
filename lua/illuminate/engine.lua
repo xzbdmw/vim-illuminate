@@ -106,32 +106,45 @@ M.keep_highlight = function(bufnr, winid)
         end)
     )
 end
+
 function M.start()
     started = true
     vim.api.nvim_create_augroup(AUGROUP, { clear = true })
     vim.api.nvim_create_autocmd({ "VimEnter", "CursorMoved", "TextChanged" }, {
         group = AUGROUP,
-        callback = function()
-            if vim.g.gd then
-                vim.defer_fn(function()
+        callback = function(args)
+            local start = vim.uv.hrtime()
+            local function wait_ts_parse_over()
+                local duration = 0.000001 * (vim.loop.hrtime() - start)
+                if duration > 2000 then
+                    return
+                end
+                if vim.b.ts_parse_over then
                     M.refresh_references()
-                end, 100)
-            else
-                vim.schedule(function()
-                    M.refresh_references()
-                end)
+                else
+                    vim.defer_fn(wait_ts_parse_over, 5)
+                end
             end
+            wait_ts_parse_over()
         end,
     })
 
-    vim.api.nvim_create_autocmd({ "BufEnter" }, {
+    vim.api.nvim_create_autocmd({ "LspAttach" }, {
         group = AUGROUP,
-        callback = function()
-            if vim.g.gd then
-                vim.defer_fn(function()
+        callback = function(args)
+            local start = vim.uv.hrtime()
+            local function wait_ts_parse_over()
+                local duration = 0.000001 * (vim.loop.hrtime() - start)
+                if duration > 2000 then
+                    return
+                end
+                if vim.b.ts_parse_over then
                     M.refresh_references()
-                end, 100)
+                else
+                    vim.defer_fn(wait_ts_parse_over, 5)
+                end
             end
+            wait_ts_parse_over()
         end,
     })
 
@@ -144,13 +157,6 @@ function M.start()
             end, 10)
         end,
     })
-    -- vim.api.nvim_create_autocmd({ "ModeChanged" }, {
-    --     pattern = "*:n",
-    --     group = AUGROUP,
-    --     callback = function()
-    --         M.refresh_references()
-    --     end,
-    -- })
     -- If vim.lsp.buf.format is called, this will call vim.api.nvim_buf_set_text which messes up extmarks.
     -- By using this `written` variable, we can ensure refresh_references doesn't terminate early based on
     -- ref.buf_cursor_in_references being incorrect (we have references but they're not actually showing
