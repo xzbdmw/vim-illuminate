@@ -234,9 +234,6 @@ function M.refresh_references(bufnr, winid)
                     return
                 end
 
-                hl.buf_clear_references(bufnr)
-                ref.buf_set_references(bufnr, {})
-
                 if
                     vim.api.nvim_buf_get_changedtick(bufnr) ~= changedtick
                     or vim.api.nvim_get_current_win() ~= winid
