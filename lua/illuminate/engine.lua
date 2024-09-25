@@ -149,12 +149,10 @@ function M.start()
     })
 
     vim.api.nvim_create_autocmd({ "ModeChanged" }, {
-        -- pattern = "n:i",
+        pattern = "*:i",
         group = AUGROUP,
         callback = function()
-            vim.defer_fn(function()
-                M.refresh_references()
-            end, 10)
+            vim.api.nvim_buf_clear_namespace(0, vim.api.nvim_create_namespace("illuminate.highlight"), 0, -1)
         end,
     })
     -- If vim.lsp.buf.format is called, this will call vim.api.nvim_buf_set_text which messes up extmarks.

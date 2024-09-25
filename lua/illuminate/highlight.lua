@@ -89,6 +89,10 @@ function M.buf_highlight_keeped_references(bufnr, references)
 end
 
 function M.range(bufnr, start, finish, kind)
+    local mode = vim.api.nvim_get_mode().mode
+    if mode == "i" then
+        return
+    end
     local region = vim.region(bufnr, start, finish, "v", false)
     for linenr, cols in pairs(region) do
         if linenr == -1 then
