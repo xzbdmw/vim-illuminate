@@ -132,6 +132,9 @@ function M.keeped_range(bufnr, start, finish, kind)
             strict = false,
         })
     end
+    vim.api.nvim_exec_autocmds("User", {
+        pattern = "SatelliteSearch",
+    })
 end
 
 function M.buf_clear_references(bufnr)
