@@ -110,6 +110,18 @@ function M.range(bufnr, start, finish, kind)
             priority = 199,
             strict = false,
         })
+        local ns = vim.api.nvim_create_namespace("reference_range")
+        if end_row ~= nil and linenr < end_row then
+            for i = linenr, end_row do
+                vim.api.nvim_buf_set_extmark(0, ns, i, 0, {
+                    end_row = i,
+                    strict = false,
+                    priority = 1,
+                    sign_text = " ",
+                })
+            end
+        end
+        _G.indent_update()
     end
 end
 
@@ -131,6 +143,18 @@ function M.keeped_range(bufnr, start, finish, kind)
             priority = 300,
             strict = false,
         })
+        local ns = vim.api.nvim_create_namespace("keeped_range")
+        if end_row ~= nil and linenr < end_row then
+            for i = linenr, end_row do
+                vim.api.nvim_buf_set_extmark(0, ns, i, 0, {
+                    end_row = i,
+                    strict = false,
+                    priority = 1,
+                    sign_text = " ",
+                })
+            end
+        end
+        _G.indent_update()
     end
     vim.api.nvim_exec_autocmds("User", {
         pattern = "SatelliteSearch",
@@ -139,12 +163,16 @@ end
 
 function M.buf_clear_references(bufnr)
     vim.api.nvim_buf_clear_namespace(bufnr, HL_NAMESPACE, 0, -1)
+    local ns = vim.api.nvim_create_namespace("reference_range")
+    vim.api.nvim_buf_clear_namespace(bufnr, ns, 0, -1)
     update()
 end
 
 function M.buf_clear_keeped_references(bufnr)
     vim.api.nvim_buf_clear_namespace(bufnr, HL_K_NAMESPACE, 0, -1)
     ref.buf_set_keeped_references(bufnr, {})
+    local ns = vim.api.nvim_create_namespace("keeped_range")
+    vim.api.nvim_buf_clear_namespace(bufnr, ns, 0, -1)
     update()
 end
 
