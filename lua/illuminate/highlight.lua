@@ -72,10 +72,6 @@ function M.buf_highlight_references(bufnr, references)
         end
     end
     update()
-    if _G.leapjump then
-        vim.cmd("redraw!")
-        _G.leapjump = false
-    end
 end
 
 function M.buf_highlight_keeped_references(bufnr, references)

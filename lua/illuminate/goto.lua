@@ -14,12 +14,21 @@ function M.Hl(current)
 		-- virt_text = { { "[" .. current .. " of " .. sc .. "]", "illuminatedH" },{ " of ", "illuminatedH" } },
 		virt_text_pos = "eol",
 	})
+    vim.b.search_winbar = "%#HlSearchLensCountNoBg#"
+    .. " [" .. current
+    .. "%#HlSearchLensCountItalicNoBg#"
+    .. " of "
+    .. "%#HlSearchLensCountNoBg#"
+    .. sc.."]"
+    require("config.utils").refresh_search_winbar()
 
 	vim.cmd("redraw")
 end
 
 function M.clear_keeped_hl()
 	vim.api.nvim_buf_clear_namespace(0, ns, 0, -1)
+    vim.b.search_winbar = ""
+    require("config.utils").refresh_search_winbar()
 end
 
 function M.goto_next_reference(wrap)
