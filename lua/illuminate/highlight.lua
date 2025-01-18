@@ -117,7 +117,6 @@ function M.range(bufnr, start, finish, kind)
                 })
             end
         end
-        _G.indent_update()
     end
 end
 
