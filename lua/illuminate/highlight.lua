@@ -81,6 +81,10 @@ function M.buf_highlight_keeped_references(bufnr, references)
             M.keeped_range(bufnr, reference[1], reference[2], reference[3])
         end
     end
+    _G.indent_update()
+    vim.api.nvim_exec_autocmds("User", {
+        pattern = "SatelliteSearch",
+    })
     update()
 end
 
@@ -149,11 +153,7 @@ function M.keeped_range(bufnr, start, finish, kind)
                 })
             end
         end
-        _G.indent_update()
     end
-    vim.api.nvim_exec_autocmds("User", {
-        pattern = "SatelliteSearch",
-    })
 end
 
 function M.buf_clear_references(bufnr)
