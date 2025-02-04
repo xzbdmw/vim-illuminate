@@ -45,66 +45,19 @@ end
 M.keep_highlight = function(bufnr, winid)
     bufnr = bufnr or vim.api.nvim_get_current_buf()
     winid = winid or vim.api.nvim_get_current_win()
-
-    local provider = M.get_provider(bufnr)
-    if not provider then
-        return
-    end
-    pcall(provider["initiate_request"], bufnr, winid)
-
-    local changedtick = vim.api.nvim_buf_get_changedtick(bufnr)
-
-    local timer = vim.loop.new_timer()
-    timers[bufnr] = timer
-    timer:start(
-        1,
-        17,
-        vim.schedule_wrap(function()
-            local ok, err = pcall(function()
-                provider = M.get_provider(bufnr)
-                if not provider then
-                    stop_timer(timer)
-                    return
-                end
-
-                local references = provider.get_references(bufnr, util.get_cursor_pos(winid))
-                if references ~= nil then
-                    ref.buf_set_keeped_references(bufnr, references)
-                    hl.buf_highlight_keeped_references(bufnr, ref.buf_get_keeped_references(bufnr))
-                    local sorted_ref = ref.buf_get_keeped_references(bufnr)
-                    local cursor = vim.api.nvim_win_get_cursor(0)
-                    for index, reference in ipairs(sorted_ref) do
-                        if
-                            cursor[1] - 1 == reference[1][1]
-                            and cursor[2] <= reference[2][2]
-                            and cursor[2] >= reference[1][2]
-                        then
-                            require("illuminate.goto").Hl(index)
-                            break
-                        end
-                    end
-                    stop_timer(timer)
-                end
-            end)
-
-            if not ok then
-                local time = vim.loop.hrtime()
-                if #error_timestamps == 5 then
-                    vim.notify(
-                        "vim-illuminate: An internal error has occured: " .. vim.inspect(ok) .. vim.inspect(err),
-                        vim.log.levels.ERROR,
-                        {}
-                    )
-                    M.stop()
-                    stop_timer(timer)
-                elseif #error_timestamps == 0 or time - error_timestamps[#error_timestamps] < 500000000 then
-                    table.insert(error_timestamps, time)
-                else
-                    error_timestamps = { time }
-                end
+    local references = ref.buf_get_references(bufnr)
+    if references ~= nil then
+        ref.buf_set_keeped_references(bufnr, references)
+        hl.buf_highlight_keeped_references(bufnr, ref.buf_get_keeped_references(bufnr))
+        local sorted_ref = ref.buf_get_keeped_references(bufnr)
+        local cursor = vim.api.nvim_win_get_cursor(0)
+        for index, reference in ipairs(sorted_ref) do
+            if cursor[1] - 1 == reference[1][1] and cursor[2] <= reference[2][2] and cursor[2] >= reference[1][2] then
+                require("illuminate.goto").Hl(index)
+                break
             end
-        end)
-    )
+        end
+    end
 end
 
 function M.start()
