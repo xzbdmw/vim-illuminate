@@ -44,7 +44,7 @@ local function throttle(f, ms)
     end
 end
 
-local update = function()
+local update = vim.schedule_wrap(function()
     local api = vim.api
     local bufnr = api.nvim_get_current_buf()
     local winid = api.nvim_get_current_win()
@@ -59,7 +59,7 @@ local update = function()
         end
         require("treesitter-context.render").open(bufnr, winid, context, context_lines, true)
     end
-end
+end)
 
 function M.buf_highlight_references(bufnr, references)
     if config.min_count_to_highlight() > #references then
@@ -93,6 +93,7 @@ function M.range(bufnr, start, finish, kind)
     if mode == "i" then
         return
     end
+    local multi = false
     local region = vim.region(bufnr, start, finish, "v", false)
     for linenr, cols in pairs(region) do
         if linenr == -1 then
@@ -112,6 +113,7 @@ function M.range(bufnr, start, finish, kind)
         })
         local ns = vim.api.nvim_create_namespace("reference_range")
         if end_row ~= nil and linenr < end_row then
+            multi = true
             for i = linenr, end_row do
                 vim.api.nvim_buf_set_extmark(0, ns, i, 0, {
                     end_row = i,
@@ -121,6 +123,9 @@ function M.range(bufnr, start, finish, kind)
                 })
             end
         end
+    end
+    if multi then
+        _G.indent_update()
     end
 end
 
@@ -157,10 +162,15 @@ function M.keeped_range(bufnr, start, finish, kind)
 end
 
 function M.buf_clear_references(bufnr)
-    vim.api.nvim_buf_clear_namespace(bufnr, HL_NAMESPACE, 0, -1)
-    local ns = vim.api.nvim_create_namespace("reference_range")
-    vim.api.nvim_buf_clear_namespace(bufnr, ns, 0, -1)
-    update()
+    vim.schedule(function()
+        if not vim.api.nvim_buf_is_valid(bufnr) then
+            return
+        end
+        vim.api.nvim_buf_clear_namespace(bufnr, HL_NAMESPACE, 0, -1)
+        local ns = vim.api.nvim_create_namespace("reference_range")
+        vim.api.nvim_buf_clear_namespace(bufnr, ns, 0, -1)
+        update()
+    end)
 end
 
 function M.buf_clear_keeped_references(bufnr)
