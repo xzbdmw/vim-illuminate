@@ -45,20 +45,9 @@ local function throttle(f, ms)
 end
 
 local update = vim.schedule_wrap(function()
-    local api = vim.api
-    local bufnr = api.nvim_get_current_buf()
-    local winid = api.nvim_get_current_win()
-    local success, t = pcall(require, "treesitter-context.context")
-    if success then
-        local context, context_lines = t.get(bufnr, winid)
-        if not context or #context == 0 then
-            return
-        end
-        if vim.w[winid].gitsigns_preview then
-            return
-        end
-        require("treesitter-context.render").open(bufnr, winid, context, context_lines, true)
-    end
+    pcall(function()
+        require("treesitter-context").update_extmark()
+    end)
 end)
 
 function M.buf_highlight_references(bufnr, references)
