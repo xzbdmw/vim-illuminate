@@ -31,6 +31,38 @@ function M.clear_keeped_hl()
     require("config.utils").refresh_search_winbar()
 end
 
+function M.get_next_reference(wrap)
+    local bufnr = vim.api.nvim_get_current_buf()
+    local winid = vim.api.nvim_get_current_win()
+    local cursor_pos = util.get_cursor_pos()
+
+    if #ref.buf_get_references(bufnr) == 0 then
+        return
+    end
+    local i = ref.bisect_left(ref.buf_get_references(bufnr), cursor_pos)
+    ::POS::
+    if i > #ref.buf_get_references(bufnr) then
+        if wrap then
+            i = 1
+        else
+            vim.api.nvim_err_writeln("E384: vim-illuminate: goto_next_reference hit BOTTOM of the references")
+            return
+        end
+    end
+    local pos, b = unpack(ref.buf_get_references(bufnr)[i])
+    if pos[1] == cursor_pos[1] and cursor_pos[2] <= b[2] and cursor_pos[2] >= pos[2] then
+        if #ref.buf_get_references(bufnr) == 1 then
+            goto END
+        else
+            i = i + 1
+        end
+        goto POS
+    end
+    ::END::
+    local new_cursor_pos = { pos[1] + 1, pos[2] }
+    return new_cursor_pos
+end
+
 function M.goto_next_reference(wrap)
     local bufnr = vim.api.nvim_get_current_buf()
     local winid = vim.api.nvim_get_current_win()
@@ -103,10 +135,35 @@ function M.goto_next_keeped_reference(wrap)
     M.Hl(i)
 end
 
+function M.get_prev_reference(wrap)
+    local bufnr = vim.api.nvim_get_current_buf()
+    local winid = vim.api.nvim_get_current_win()
+    local cursor_pos = util.get_cursor_pos()
+
+    if #ref.buf_get_references(bufnr) == 0 then
+        return
+    end
+
+    local i = ref.bisect_left(ref.buf_get_references(bufnr), cursor_pos)
+    i = i - 1
+    if i == 0 then
+        if wrap then
+            i = #ref.buf_get_references(bufnr)
+        else
+            vim.api.nvim_err_writeln("E384: vim-illuminate: goto_prev_reference hit TOP of the references")
+            return
+        end
+    end
+
+    local pos, _ = unpack(ref.buf_get_references(bufnr)[i])
+    local new_cursor_pos = { pos[1] + 1, pos[2] }
+    return new_cursor_pos
+end
+
 function M.goto_prev_reference(wrap)
     local bufnr = vim.api.nvim_get_current_buf()
     local winid = vim.api.nvim_get_current_win()
-    local cursor_pos = util.get_cursor_pos(winid)
+    local cursor_pos = util.get_cursor_pos()
 
     if #ref.buf_get_references(bufnr) == 0 then
         return
@@ -130,6 +187,7 @@ function M.goto_prev_reference(wrap)
     vim.api.nvim_win_set_cursor(winid, new_cursor_pos)
     engine.unfreeze_buf(bufnr)
 end
+
 function M.goto_prev_keeped_reference(wrap)
     local bufnr = vim.api.nvim_get_current_buf()
     local winid = vim.api.nvim_get_current_win()

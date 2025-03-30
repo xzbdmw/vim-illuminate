@@ -108,7 +108,7 @@ function M.range(bufnr, start, finish, kind)
                     end_row = i,
                     strict = false,
                     priority = 1,
-                    sign_text = " ",
+                    virt_text = { { "", "Hl" } },
                 })
             end
         end
@@ -143,7 +143,7 @@ function M.keeped_range(bufnr, start, finish, kind)
                     end_row = i,
                     strict = false,
                     priority = 1,
-                    sign_text = " ",
+                    virt_text = { { "", "Hl" } },
                 })
             end
         end

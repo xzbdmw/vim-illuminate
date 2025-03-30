@@ -46,8 +46,20 @@ M.keep_highlight = function(bufnr, winid)
     bufnr = bufnr or vim.api.nvim_get_current_buf()
     winid = winid or vim.api.nvim_get_current_win()
     local references = ref.buf_get_references(bufnr)
+    local dedup = {}
+    local seem = {}
+    for _, r in ipairs(references) do
+        local id = string.format("%d-%d-%d-%d", r[1][1], r[1][2], r[2][1], r[2][2])
+        if seem[id] then
+            goto continue
+        else
+            seem[id] = true
+            table.insert(dedup, r)
+        end
+        ::continue::
+    end
     if references ~= nil then
-        ref.buf_set_keeped_references(bufnr, references)
+        ref.buf_set_keeped_references(bufnr, dedup)
         hl.buf_highlight_keeped_references(bufnr, ref.buf_get_keeped_references(bufnr))
         local sorted_ref = ref.buf_get_keeped_references(bufnr)
         local cursor = vim.api.nvim_win_get_cursor(0)
@@ -66,38 +78,14 @@ function M.start()
     vim.api.nvim_create_autocmd({ "VimEnter", "CursorMoved", "TextChanged" }, {
         group = AUGROUP,
         callback = function(args)
-            local start = vim.uv.hrtime()
-            local function wait_ts_parse_over()
-                local duration = 0.000001 * (vim.loop.hrtime() - start)
-                if duration > 2000 then
-                    return
-                end
-                if vim.b.ts_parse_over then
-                    M.refresh_references()
-                else
-                    vim.defer_fn(wait_ts_parse_over, 5)
-                end
-            end
-            wait_ts_parse_over()
+            M.refresh_references()
         end,
     })
 
     vim.api.nvim_create_autocmd({ "LspAttach" }, {
         group = AUGROUP,
         callback = function(args)
-            local start = vim.uv.hrtime()
-            local function wait_ts_parse_over()
-                local duration = 0.000001 * (vim.loop.hrtime() - start)
-                if duration > 2000 then
-                    return
-                end
-                if vim.b.ts_parse_over then
-                    M.refresh_references()
-                else
-                    vim.defer_fn(wait_ts_parse_over, 5)
-                end
-            end
-            wait_ts_parse_over()
+            M.refresh_references()
         end,
     })
 
@@ -137,6 +125,11 @@ end
 ---
 --- @bufnr (number)
 function M.refresh_references(bufnr, winid)
+    local file_path = vim.api.nvim_buf_get_name(0)
+
+    if file_path ~= "" and vim.loop.fs_stat(file_path) == nil then
+        return
+    end
     bufnr = bufnr or vim.api.nvim_get_current_buf()
     winid = winid or vim.api.nvim_get_current_win()
 
@@ -153,7 +146,7 @@ function M.refresh_references(bufnr, winid)
     -- We might want to optimize here by returning early if cursor is in references.
     -- The downside is that LSP servers can sometimes return a different list of references
     -- as you move around an existing reference (like return statements).
-    if written[bufnr] or not ref.buf_cursor_in_references(bufnr, util.get_cursor_pos(winid)) then
+    if written[bufnr] or not ref.buf_cursor_in_references(bufnr, util.get_cursor_pos()) then
         hl.buf_clear_references(bufnr)
         ref.buf_set_references(bufnr, {})
     elseif config.large_file_cutoff() ~= nil and vim.fn.line("$") > config.large_file_cutoff() then
