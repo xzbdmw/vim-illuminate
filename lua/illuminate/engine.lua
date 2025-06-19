@@ -31,6 +31,17 @@ local function buf_should_illuminate(bufnr)
         )
 end
 
+local function buf_should_keep_highlight(bufnr)
+    if is_paused or paused_bufs[bufnr] or stopped_bufs[bufnr] then
+        return false
+    end
+
+    return config.should_enable()(bufnr)
+        and (config.max_file_lines() == nil or vim.fn.line("$") <= config.max_file_lines())
+        and util.is_allowed(config.modes_allowlist(bufnr), config.modes_denylist(bufnr), vim.api.nvim_get_mode().mode)
+    -- Note: filetypes_denylist is intentionally excluded for keep_highlight functionality
+end
+
 local function stop_timer(timer)
     if vim.loop.is_active(timer) then
         vim.loop.timer_stop(timer)
@@ -45,7 +56,27 @@ end
 M.keep_highlight = function(bufnr, winid)
     bufnr = bufnr or vim.api.nvim_get_current_buf()
     winid = winid or vim.api.nvim_get_current_win()
-    local references = ref.buf_get_references(bufnr)
+
+    -- Check if keep_highlight is allowed for this buffer (excludes filetypes_denylist)
+    if not buf_should_keep_highlight(bufnr) then
+        return
+    end
+
+    local references
+    local current_filetype = vim.api.nvim_buf_get_option(bufnr, "filetype")
+    local is_denied = vim.tbl_contains(config.filetypes_denylist(), current_filetype)
+
+    if is_denied then
+        -- Manually get references for denied filetypes
+        local provider = M.get_provider(bufnr)
+        if not provider then
+            return
+        end
+        references = provider.get_references(bufnr, util.get_cursor_pos(winid))
+    else
+        -- Use cached references for auto-highlighted buffers
+        references = ref.buf_get_references(bufnr)
+    end
     local dedup = {}
     local seem = {}
     for _, r in ipairs(references) do
